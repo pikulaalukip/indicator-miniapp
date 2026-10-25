@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>INDICATOR Mini App</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+/* Белая минималистичная тема: одна колонка как в Telegram Mini App, чёрные кнопки, зелёный/красный только для рынка */
+:root {
+  --bg: #FFFFFF;
+  --fg: #0A0A0A;
+  --muted: #5E5E5E;
+  --soft: #F5F5F5;
+  --line: #E8E8E8;
+  --up: #00804F;
+  --up-bright: #00B377;
+  --down: #D32F2F;
+  --poc: #A87900;
+  --va: #1E6FD9;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--fg); }
+body { font-family: var(--sans); font-size: 15px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; cursor: pointer; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--va); outline-offset: 2px; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+.screen { flex: 1; display: flex; flex-direction: column; gap: 22px;
+  padding-block: 18px 28px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.topbar { display: flex; align-items: center; justify-content: space-between; min-height: 44px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.logo { width: 34px; height: 34px; border-radius: 10px; background: var(--fg); display: flex; align-items: flex-end; justify-content: center; gap: 3px; padding-bottom: 8px; }
+.logo span { width: 5px; background: var(--up-bright); border-radius: 1px; }
+.wordmark { font-family: var(--mono); font-weight: 600; letter-spacing: .12em; font-size: 15px; }
+.pill { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; }
+.back { border: 0; background: none; color: var(--muted); display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 0; font-size: 15px; }
+
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; color: var(--up); }
+h1 { margin: 0; font-size: 28px; line-height: 1.15; letter-spacing: -.02em; text-wrap: balance; }
+h2 { margin: 0; font-size: 17px; }
+.lead { margin: 0; color: #555; }
+.small { font-size: 12px; color: var(--muted); }
+
+.btn { min-height: 52px; border-radius: 14px; border: 0; background: var(--fg); color: #FFF; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; width: 100%; }
+.btn.ghost { background: transparent; color: var(--fg); border: 1px solid #DADADA; font-weight: 500; }
+.btn[disabled] { background: #C9C9C9; cursor: not-allowed; }
+.card { border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+/* живой график */
+.live { margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))); padding: 16px max(16px, env(safe-area-inset-left, 0px)); background: #FAFAFA; border-block: 1px solid #EDEDED; display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tag { font-family: var(--mono); font-size: 12px; font-weight: 600; border: 1px solid #DADADA; border-radius: 6px; padding: 3px 8px; }
+.livebadge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; letter-spacing: .08em; color: #FFF; background: var(--down); border-radius: 6px; padding: 4px 8px; }
+.livebadge i { width: 6px; height: 6px; border-radius: 3px; background: #FFF; animation: blink 1.4s infinite; }
+.livebadge.demo { background: #6B6B6B; }
+@keyframes blink { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .livebadge i { animation: none; } }
+.price { font-family: var(--mono); font-size: 30px; font-weight: 600; letter-spacing: -.02em; }
+.chg { font-family: var(--mono); font-size: 14px; }
+.chart { width: 100%; height: 42vh; min-height: 260px; max-height: 420px; border-radius: 12px; background: #FFF; border: 1px solid var(--line); overflow: hidden; }
+.chart.small-h { height: 300px; }
+.sigrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #FFF; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 14px; flex-wrap: wrap; }
+.badge { font-size: 11px; font-weight: 700; color: #FFF; border-radius: 4px; padding: 2px 6px; letter-spacing: .04em; }
+.badge.buy { background: var(--up); } .badge.sell { background: var(--down); }
+.verdict { font-size: 11px; font-weight: 700; letter-spacing: .06em; color: #FFF; border-radius: 6px; padding: 3px 8px; background: var(--muted); }
+.verdict.good { background: var(--up); } .verdict.mid { background: var(--poc); } .verdict.bad { background: var(--down); }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.tile { background: #FFF; border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tile b { font-family: var(--mono); font-size: 20px; font-weight: 600; }
+.tile span { font-size: 12px; color: var(--muted); }
+.notice { font-size: 12px; color: #555; background: var(--soft); border-radius: 10px; padding: 8px 10px; }
+
+.list { display: flex; flex-direction: column; border-top: 1px solid #EDEDED; }
+.list > * { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid #EDEDED; min-height: 48px; text-decoration: none; }
+.kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; font-size: 14px; }
+.kv > :nth-child(odd) { color: var(--muted); }
+.kv > :nth-child(even) { text-align: right; }
+.table { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; font-family: var(--mono); font-size: 14px; }
+.table > div { display: flex; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #EDEDED; }
+.table > div:last-child { border-bottom: 0; }
+.bar { height: 6px; border-radius: 3px; background: #EDEDED; } .bar > i { display: block; height: 6px; border-radius: 3px; }
+
+.chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.chip { min-height: 44px; border-radius: 10px; border: 1px solid #E4E4E4; background: transparent; font-family: var(--mono); font-size: 13px; font-weight: 600; }
+.chip[aria-pressed="true"] { background: var(--fg); color: #FFF; border-color: var(--fg); }
+.seg { display: grid; grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 12px; background: var(--soft); border: 1px solid var(--line); }
+.seg button { min-height: 40px; border-radius: 9px; border: 0; background: transparent; color: var(--muted); font-weight: 600; font-size: 14px; }
+.seg button[aria-pressed="true"] { background: #FFF; color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.field { display: flex; flex-direction: column; gap: 8px; }
+.field label { font-size: 13px; color: #555; }
+.input { min-height: 50px; border-radius: 12px; border: 1px solid #DADADA; background: var(--soft); padding: 0 14px; font-size: 16px; color: var(--fg); width: 100%; }
+.plan { min-height: 64px; display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 14px; border: 1px solid var(--line); background: #FAFAFA; text-align: left; width: 100%; }
+.plan[aria-pressed="true"] { border-color: var(--up); background: #EEF7F2; }
+.plan .ring { width: 20px; height: 20px; border-radius: 10px; border: 2px solid #C4C4C4; flex-shrink: 0; }
+.plan[aria-pressed="true"] .ring { border: 6px solid var(--up); }
+.plan .nm { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.steps div { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #6B6B6B; }
+.steps div::before { content: ""; height: 3px; border-radius: 2px; background: #E4E4E4; }
+.steps .done { color: var(--up); } .steps .done::before { background: var(--up); }
+.steps .now { color: var(--fg); font-weight: 600; } .steps .now::before { background: var(--fg); }
+.ok { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 14px; background: #EEF7F2; border: 1px solid var(--up); }
+.check { color: var(--up); font-size: 13px; }
+
+nav.tabs { position: sticky; bottom: 0; background: rgba(255,255,255,.96); backdrop-filter: blur(8px); border-top: 1px solid #EDEDED; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 6px max(4px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(4px, env(safe-area-inset-left, 0px)); }
+nav.tabs button { border: 0; background: none; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px; color: #6B6B6B; }
+nav.tabs button[aria-current="page"] { color: var(--fg); font-weight: 600; }
+nav.tabs svg { width: 22px; height: 22px; }
+</style>
+
+<div class="app">
+  <div id="view" class="screen" aria-live="polite"></div>
+  <nav class="tabs" aria-label="Разделы">
+    <button data-tab="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6h-6v6H4z"/></svg>Главная</button>
+    <button data-tab="analyze"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 5-6"/></svg>Анализ</button>
+    <button data-tab="plans"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12l3 6-9 12L3 9z"/><path d="M3 9h18"/></svg>Доступ</button>
+    <button data-tab="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>Профиль</button>
+  </nav>
+</div>
+
+<script>
+(() => {
+// ---------- настройки (совпадают с indicator_final.pine) ----------
+const CFG = {
+  sens: 1.0, atrLen: 11, emaLen: 50,
+  tp: [1.618, 2.618, 4.236], sl: 1.618,
+  r: [1, 2, 3], slBuf: 0.2, // режим «От линии трейлинга (R)»
+  statN: 30, good: 60, bad: 45,
+  pfBars: 360, pfRows: 80, vaPct: 70,
+  channel: "https://t.me/+ek0gaMHzPEZjMzJi",
+  chat: "https://t.me/+yiCccBnnIScxZGMy",
+  plans: [
+    { id: "m1", name: "1 месяц", note: "попробовать", price: 99, days: 30 },
+    { id: "m3", name: "3 месяца", note: "≈ $70 в месяц, экономия 29%", price: 211, days: 90 },
+    { id: "life", name: "Навсегда", note: "один платёж, без продлений", price: 499, days: 0 }
+  ],
+  coins: ["BTC", "ETH", "SOL", "TON", "XRP", "BNB", "DOGE", "SUI"]
+};
+const REST = ["https://data-api.binance.vision/api/v3/klines", "https://api.binance.com/api/v3/klines"];
+const WS = "wss://data-stream.binance.vision/ws/";
+
+const tg = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData ? window.Telegram.WebApp : null;
+if (tg) { try { tg.ready(); tg.expand(); tg.setHeaderColor("#FFFFFF"); tg.setBackgroundColor("#FFFFFF"); } catch (e) {} }
+const haptic = (t) => { try { tg && tg.HapticFeedback.impactOccurred(t || "light"); } catch (e) {} };
+
+// ---------- хранилище (в демо-режиме всё хранится в браузере) ----------
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("ind_" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("ind_" + k, JSON.stringify(v)); } catch (e) {} }
+};
+const weekId = () => { const d = new Date(); const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const day = (t.getUTCDay() + 6) % 7; t.setUTCDate(t.getUTCDate() - day); return t.toISOString().slice(0, 10); };
+const nextWeekDate = () => { const d = new Date(weekId()); d.setDate(d.getDate() + 7); return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" }); };
+
+// ---------- форматирование ----------
+const fmt = (p) => p == null || isNaN(p) ? "—" : p.toLocaleString("ru-RU", { maximumFractionDigits: p >= 1000 ? 1 : p >= 1 ? 3 : 6, minimumFractionDigits: p >= 1000 ? 1 : p >= 1 ? 2 : 4 });
+const pct = (n, d) => d > 0 ? Math.round(100 * n / d) : 0;
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// ---------- данные ----------
+async function loadKlines(symbol, interval, limit) {
+  for (const base of REST) {
+    try {
+      const r = await fetch(`${base}?symbol=${symbol}&interval=${interval}&limit=${limit}`);
+      if (!r.ok) { if (r.status === 400) throw new Error("bad_symbol"); continue; }
+      const a = await r.json();
+      return { live: true, bars: a.map((k) => ({ time: Math.floor(k[0] / 1000), open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5], closed: k[6] < Date.now() })) };
+    } catch (e) { if (e.message === "bad_symbol") throw e; }
+  }
+  return { live: false, bars: demoBars(symbol, interval, limit) };
+}
+// запасные демо-свечи, если биржа недоступна (например, в предпросмотре)
+function demoBars(symbol, interval, n) {
+  let seed = [...symbol + interval].reduce((a, c) => a * 31 + c.charCodeAt(0) >>> 0, 7);
+  const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const step = { "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800 }[interval] || 3600;
+  const base = { BTC: 60000, ETH: 3000, SOL: 150, TON: 5, XRP: .6, BNB: 550, DOGE: .15, SUI: 2 }[symbol.replace("USDT", "")] || 10;
+  const vol = interval === "1w" ? .07 : interval === "1d" ? .03 : .012;
+  let p = base * .55, t = Math.floor(Date.now() / 1000 / step) * step - (n - 1) * step, drift = 0;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    if (i % 40 === 0) drift = (rnd() - .45) * vol * .35;
+    const o = p, c = Math.max(o * (1 + drift + (rnd() - .5) * vol), base * .05);
+    const h = Math.max(o, c) * (1 + rnd() * vol * .5), l = Math.min(o, c) * (1 - rnd() * vol * .5);
+    out.push({ time: t + i * step, open: o, high: h, low: l, close: c, volume: 1000 + rnd() * 5000, closed: i < n - 1 });
+    p = c;
+  }
+  return out;
+}
+
+// ---------- индикатор (перенос логики Pine) ----------
+function compute(bars, mode) {
+  const n = bars.length, C = bars.map((b) => b.close), H = bars.map((b) => b.high), L = bars.map((b) => b.low);
+  // ATR (RMA)
+  const atr = new Array(n).fill(NaN);
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    const tr = i === 0 ? H[i] - L[i] : Math.max(H[i] - L[i], Math.abs(H[i] - C[i - 1]), Math.abs(L[i] - C[i - 1]));
+    if (i < CFG.atrLen) { sum += tr; if (i === CFG.atrLen - 1) atr[i] = sum / CFG.atrLen; }
+    else atr[i] = (atr[i - 1] * (CFG.atrLen - 1) + tr) / CFG.atrLen;
+  }
+  // EMA
+  const ema = new Array(n).fill(NaN); const k = 2 / (CFG.emaLen + 1);
+  for (let i = 0; i < n; i++) ema[i] = i === 0 ? C[0] : C[i] * k + ema[i - 1] * (1 - k);
+  // линия трейлинга
+  const stop = new Array(n).fill(NaN);
+  for (let i = 0; i < n; i++) {
+    const prev = i > 0 && !isNaN(stop[i - 1]) ? stop[i - 1] : 0, s = CFG.sens * atr[i], p = C[i], p1 = i > 0 ? C[i - 1] : NaN;
+    if (isNaN(s)) continue;
+    stop[i] = p > prev && p1 > prev ? Math.max(prev, p - s) : p < prev && p1 < prev ? Math.min(prev, p + s) : p > prev ? p - s : p + s;
+  }
+  // сигналы только по закрытым свечам
+  const signals = [];
+  for (let i = 1; i < n; i++) {
+    if (!bars[i].closed || isNaN(stop[i]) || isNaN(stop[i - 1])) continue;
+    if (C[i] > stop[i] && C[i - 1] <= stop[i - 1]) signals.push({ i, dir: 1 });
+    else if (C[i] < stop[i] && C[i - 1] >= stop[i - 1]) signals.push({ i, dir: -1 });
+  }
+  // сделки и статистика
+  const res = []; let tr = null;
+  const levels = (entry, dir, i) => {
+    if (mode === "R") {
+      const sl = stop[i] - dir * CFG.slBuf * atr[i], risk = Math.abs(entry - sl);
+      return { entry, sl, tp: CFG.r.map((r) => entry + dir * r * risk) };
+    }
+    return { entry, tp: CFG.tp.map((t) => entry * (1 + dir * t / 100)), sl: entry * (1 - dir * CFG.sl / 100) };
+  };
+  let si = 0;
+  for (let i = 0; i < n; i++) {
+    if (!bars[i].closed) break;
+    if (si < signals.length && signals[si].i === i) {
+      if (tr && tr.open) { res.push(tr.stage > 0 ? tr.stage : -1); tr.open = false; tr.result = tr.stage > 0 ? tr.stage : -1; }
+      const dir = signals[si].dir; tr = { i, dir, time: bars[i].time, open: true, stage: 0, ...levels(C[i], dir, i) }; signals[si].trade = tr; si++;
+      continue;
+    }
+    if (tr && tr.open) {
+      if (tr.dir === 1 ? L[i] <= tr.sl : H[i] >= tr.sl) { tr.open = false; tr.result = tr.stage; res.push(tr.stage); }
+      else {
+        const fav = tr.dir === 1 ? H[i] : L[i];
+        const reached = tr.dir * (fav - tr.tp[2]) >= 0 ? 3 : tr.dir * (fav - tr.tp[1]) >= 0 ? 2 : tr.dir * (fav - tr.tp[0]) >= 0 ? 1 : 0;
+        if (reached > tr.stage) { tr.stage = reached; if (reached === 3) { tr.open = false; tr.result = 3; res.push(3); } }
+      }
+    }
+  }
+  const last = res.slice(-CFG.statN), d = last.length;
+  const st = { n: d, tp1: last.filter((r) => r >= 1).length, tp2: last.filter((r) => r >= 2).length, tp3: last.filter((r) => r >= 3).length, sl: last.filter((r) => r === 0).length, rev: last.filter((r) => r === -1).length };
+  st.pass = pct(st.tp1, d);
+  st.verdict = d < 10 ? ["мало сделок", ""] : st.pass >= CFG.good ? ["ХОРОШО", "good"] : st.pass >= CFG.bad ? ["СРЕДНЕ", "mid"] : ["ПЛОХО", "bad"];
+  return { atr, ema, stop, signals, trade: tr, stats: st, profile: profile(bars) };
+}
+function profile(bars) {
+  const len = Math.min(CFG.pfBars, bars.length), part = bars.slice(-len), rows = CFG.pfRows;
+  const hi = Math.max(...part.map((b) => b.high)), lo = Math.min(...part.map((b) => b.low)), step = (hi - lo) / rows;
+  if (!(step > 0)) return null;
+  const tot = new Array(rows).fill(0); let buy = 0, all = 0;
+  for (const b of part) {
+    const rng = b.high - b.low, bs = rng > 0 ? (b.close - b.low) / rng : .5;
+    const r0 = Math.max(0, Math.min(rows - 1, Math.floor((b.low - lo) / step))), r1 = Math.max(r0, Math.min(rows - 1, Math.floor((b.high - lo) / step)));
+    for (let r = r0; r <= r1; r++) {
+      const rl = lo + r * step, f = rng > 0 ? Math.max(0, Math.min(b.high, rl + step) - Math.max(b.low, rl)) / rng : 1;
+      tot[r] += b.volume * f;
+    }
+    buy += b.volume * bs; all += b.volume;
+  }
+  const vMax = Math.max(...tot), sumV = tot.reduce((a, b) => a + b, 0), poc = tot.indexOf(vMax);
+  let a = poc, z = poc, acc = vMax; const target = sumV * CFG.vaPct / 100;
+  while (acc < target && (a > 0 || z < rows - 1)) {
+    const up = z < rows - 1 ? tot[z + 1] : -1, dn = a > 0 ? tot[a - 1] : -1;
+    if (up >= dn) { z++; acc += up; } else { a--; acc += dn; }
+  }
+  return { poc: lo + (poc + .5) * step, vah: lo + (z + 1) * step, val: lo + a * step, buyPct: all > 0 ? Math.round(100 * buy / all) : 50 };
+}
+
+// ---------- график ----------
+let active = []; // открытые графики и сокеты текущего экрана
+function cleanup() { for (const a of active) { try { a.ws && a.ws.close(); } catch (e) {} try { a.chart && a.chart.remove(); } catch (e) {} } active = []; }
+
+async function mountChart(el, symbol, interval, onUpdate, mode) {
+  const LW = window.LightweightCharts;
+  const holder = { symbol, interval };
+  active.push(holder);
+  let data;
+  try { data = await loadKlines(symbol, interval, interval === "1w" ? 500 : 600); }
+  catch (e) { onUpdate({ error: "Монета не найдена на Binance. Проверьте тикер." }); return; }
+  if (!active.includes(holder)) return;
+  let bars = data.bars, calc = compute(bars, mode);
+  if (!LW) { el.innerHTML = '<div class="notice" style="margin:12px">График не загрузился. Проверьте интернет и откройте приложение снова.</div>'; onUpdate({ bars, calc, live: data.live }); return; }
+  const chart = LW.createChart(el, {
+    autoSize: true,
+    layout: { background: { type: "solid", color: "#FFFFFF" }, textColor: "#5E5E5E", fontFamily: "Inter, system-ui, sans-serif", fontSize: 11 },
+    grid: { vertLines: { color: "#F2F2F2" }, horzLines: { color: "#F2F2F2" } },
+    rightPriceScale: { borderColor: "#E8E8E8" },
+    timeScale: { borderColor: "#E8E8E8", rightOffset: 6, barSpacing: interval === "1w" ? 7 : 6 },
+    crosshair: { mode: 0 },
+    handleScale: { axisPressedMouseMove: true }
+  });
+  holder.chart = chart;
+  const candles = chart.addCandlestickSeries({ upColor: "#00B377", downColor: "#E5484D", borderVisible: false, wickUpColor: "#00B377", wickDownColor: "#E5484D" });
+  const emaS = chart.addLineSeries({ color: "#9C7CF4", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  const stopS = chart.addLineSeries({ color: "rgba(10,10,10,.35)", lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  let lines = [];
+  const draw = () => {
+    calc = compute(bars, mode);
+    candles.setData(bars.map(({ time, open, high, low, close }) => ({ time, open, high, low, close })));
+    emaS.setData(bars.map((b, i) => ({ time: b.time, value: calc.ema[i] })));
+    stopS.setData(bars.map((b, i) => isNaN(calc.stop[i]) ? { time: b.time } : { time: b.time, value: calc.stop[i] }));
+    candles.setMarkers(calc.signals.map((s) => s.dir === 1
+      ? { time: bars[s.i].time, position: "belowBar", color: "#00804F", shape: "arrowUp", text: "BUY" }
+      : { time: bars[s.i].time, position: "aboveBar", color: "#D32F2F", shape: "arrowDown", text: "SELL" }));
+    lines.forEach((l) => candles.removePriceLine(l)); lines = [];
+    const add = (price, color, title, style) => lines.push(candles.createPriceLine({ price, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title }));
+    const t = calc.trade;
+    if (t) {
+      add(t.entry, "#6B6B6B", "Вход", 0);
+      t.tp.forEach((p, j) => add(p, "#00804F", "TP" + (j + 1) + (t.stage > j ? " ✓" : ""), 2));
+      add(t.sl, "#D32F2F", "SL", 2);
+    }
+    if (calc.profile) { add(calc.profile.poc, "#A87900", "POC", 0); add(calc.profile.vah, "#1E6FD9", "VAH", 1); add(calc.profile.val, "#1E6FD9", "VAL", 1); }
+    onUpdate({ bars, calc, live: data.live });
+  };
+  draw();
+  chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, bars.length - (interval === "1w" ? 90 : 120)), to: bars.length + 4 });
+
+  if (data.live && "WebSocket" in window) {
+    const connect = () => {
+      const ws = new WebSocket(`${WS}${symbol.toLowerCase()}@kline_${interval}`);
+      holder.ws = ws;
+      let pending = false;
+      ws.onmessage = (ev) => {
+        const k = JSON.parse(ev.data).k; if (!k) return;
+        const b = { time: Math.floor(k.t / 1000), open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v, closed: !!k.x };
+        const last = bars[bars.length - 1];
+        if (last && last.time === b.time) bars[bars.length - 1] = b; else if (!last || b.time > last.time) bars.push(b);
+        if (b.closed) { draw(); return; }
+        candles.update({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close });
+        if (!pending) { pending = true; setTimeout(() => { pending = false; onUpdate({ bars, calc, live: true, tick: true }); }, 500); }
+      };
+      ws.onclose = () => { if (active.includes(holder)) setTimeout(connect, 3000); };
+    };
+    connect();
+  }
+}
+
+// ---------- общие куски интерфейса ----------
+const view = document.getElementById("view");
+const state = { tab: "home", sub: null, demoCoin: "ETH", coin: "SOL", tf: "1h", plan: "m3", payCoin: "USDT", subs: store.get("subs", { channel: false, chat: false }) };
+
+function header(backTo) {
+  if (tg) { try { backTo ? tg.BackButton.show() : tg.BackButton.hide(); } catch (e) {} }
+  if (backTo) return `<div class="topbar"><button class="back" data-go="${backTo}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад</button><span class="pill">для TradingView</span></div>`;
+  return `<div class="topbar"><div class="brand"><div class="logo" aria-hidden="true"><span style="height:10px"></span><span style="height:18px"></span><span style="height:14px"></span></div><span class="wordmark">INDICATOR</span></div><span class="pill">для TradingView</span></div>`;
+}
+function statsBlock(st, title) {
+  return `<div style="display:flex;flex-direction:column;gap:8px">
+    <div class="row"><span style="font-size:13px;color:#555">${title}</span><span class="verdict ${st.verdict[1]}">${st.verdict[0]}</span></div>
+    <div class="tiles">
+      <div class="tile"><b style="color:var(--up)">${st.n ? st.pass + "%" : "—"}</b><span>дошли до TP1</span></div>
+      <div class="tile"><b>${st.n ? pct(st.tp2, st.n) + "%" : "—"}</b><span>дошли до TP2</span></div>
+      <div class="tile"><b style="color:var(--down)">${st.n ? pct(st.sl, st.n) + "%" : "—"}</b><span>по стопу</span></div>
+    </div>
+    <span class="small">Закрытых сделок в расчёте: ${st.n}${st.rev ? ` · обратный сигнал до TP1: ${st.rev}` : ""}</span>
+  </div>`;
+}
+function tradeText(t) {
+  if (!t) return "сигналов пока нет";
+  const s = t.open ? (t.stage ? `TP${t.stage} взят, идёт к TP${t.stage + 1}` : "ждёт TP1") : t.result >= 1 ? `закрыта на TP${t.result}` : t.result === 0 ? "закрыта по стопу" : "закрыта обратным сигналом";
+  return s;
+}
+const access = () => { const a = store.get("access", null); if (!a) return null; if (a.until && Date.now() > a.until) return null; return a; };
+
+// ---------- экраны ----------
+const screens = {
+  home() {
+    view.innerHTML = `${header()}
+    <section class="live" aria-label="Живой график BTC с индикатором">
+      <div class="row">
+        <div style="display:flex;align-items:baseline;gap:8px"><span class="mono" style="font-weight:600">BTC / USDT</span><span class="small">Binance</span></div>
+        <div style="display:flex;gap:6px;align-items:center"><span class="tag">1W</span><span id="lv" class="livebadge"><i></i>LIVE</span></div>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span id="px" class="price">—</span><span id="chg" class="chg"></span></div>
+      <div id="chart" class="chart" role="img" aria-label="Недельный график BTC с сигналами индикатора"></div>
+      <div class="sigrow" id="sig"><span class="small">Считаю индикатор…</span></div>
+      <div id="stats"></div>
+      <div id="demoNote"></div>
+    </section>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <h1>Сигналы для крипты прямо на графике</h1>
+      <p class="lead">Индикатор для TradingView: точки входа BUY / SELL, цели TP1–TP3, стоп и профиль объёма по любой монете.</p>
+    </div>
+    <div class="list">
+      <div><span>Сигналы BUY / SELL</span><span class="small">по линии ATR-трейлинга</span></div>
+      <div><span>Цели TP1–TP3 и SL</span><span class="small">сразу на графике</span></div>
+      <div><span>Профиль объёма</span><span class="small">POC, VAH, VAL</span></div>
+      <div><span>Статистика монеты</span><span class="small">последние 30 сделок</span></div>
+    </div>
+    <button class="card" data-go="analyze" style="flex-direction:row;align-items:center;background:var(--soft);border:0;text-align:left;width:100%">
+      <span style="width:44px;height:44px;border-radius:12px;background:var(--fg);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00B377" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></span>
+      <span style="flex:1;display:flex;flex-direction:column;gap:2px"><b style="font-size:15px">1 монета в неделю бесплатно</b><span class="small">для подписчиков канала и чата</span></span>
+      <span aria-hidden="true" style="color:var(--muted)">›</span>
+    </button>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn" data-go="plans">Купить доступ</button>
+      <button class="btn ghost" data-go="demo">Как читать график</button>
+    </div>`;
+        mountChart(document.getElementById("chart"), "BTCUSDT", "1w", ({ bars, calc, live, error, tick }) => {
+      if (error) return;
+      const last = bars[bars.length - 1];
+      document.getElementById("px").textContent = fmt(last.close);
+      const ch = (last.close / last.open - 1) * 100, chg = document.getElementById("chg");
+      chg.textContent = `${ch >= 0 ? "+" : ""}${ch.toFixed(2)}% за неделю`; chg.style.color = ch >= 0 ? "var(--up)" : "var(--down)";
+      const t = calc.trade;
+      document.getElementById("sig").innerHTML = t ? `<span style="display:flex;align-items:center;gap:8px"><span class="badge ${t.dir === 1 ? "buy" : "sell"}">${t.dir === 1 ? "BUY" : "SELL"}</span><span>последний сигнал, вход <span class="mono">${fmt(t.entry)}</span></span></span><span class="mono" style="font-size:13px">${tradeText(t)}</span>` : `<span class="small">Сигналов пока нет</span>`;
+      if (!tick) document.getElementById("stats").innerHTML = statsBlock(calc.stats, `BTC 1W, последние ${CFG.statN} сделок · уровни от линии трейлинга (1R / 2R / 3R)`);
+      if (!live && !tick) { const lv = document.getElementById("lv"); lv.className = "livebadge demo"; lv.innerHTML = "ДЕМО"; document.getElementById("demoNote").innerHTML = `<div class="notice">Сейчас показаны демо-данные: в этом предпросмотре нет доступа к бирже. После размещения приложения график и сигналы будут живыми.</div>`; }
+    }, "R");
+  },
+
+  demo() {
+    view.innerHTML = `${header("home")}
+      <div style="display:flex;flex-direction:column;gap:6px"><span class="eyebrow">КАК ЧИТАТЬ</span><h1>Индикатор на графике</h1></div>
+      <div class="seg" style="--n:3" role="group" aria-label="Монета">${["BTC", "ETH", "SOL"].map((c) => `<button data-demo="${c}" aria-pressed="${state.demoCoin === c}">${c}</button>`).join("")}</div>
+      <div id="chart" class="chart small-h" role="img" aria-label="График ${state.demoCoin} 1h с индикатором"></div>
+      <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;color:#333">
+        <div style="display:flex;gap:12px"><span class="badge buy" style="height:fit-content">BUY</span><span><b>Сигнал на вход.</b> Цена закрылась выше пунктирной линии трейлинга. SELL работает зеркально.</span></div>
+        <div style="display:flex;gap:12px"><span style="width:28px;height:0;border-top:2px dashed var(--up);margin-top:10px;flex-shrink:0"></span><span><b>TP1–TP3 и SL.</b> Цели +1.618%, +2.618%, +4.236% и стоп −1.618% от цены входа. Галочка значит, что цель уже взята.</span></div>
+        <div style="display:flex;gap:12px"><span style="width:28px;height:0;border-top:2px solid var(--poc);margin-top:10px;flex-shrink:0"></span><span><b>POC.</b> Цена, где прошёл самый большой объём.</span></div>
+        <div style="display:flex;gap:12px"><span style="width:28px;height:0;border-top:2px dashed var(--va);margin-top:10px;flex-shrink:0"></span><span><b>VAH / VAL.</b> Границы зоны, где прошло 70% объёма.</span></div>
+        <div style="display:flex;gap:12px"><span style="width:28px;height:0;border-top:2px solid #9C7CF4;margin-top:10px;flex-shrink:0"></span><span><b>EMA 50.</b> Средняя линия тренда.</span></div>
+      </div>
+      <div id="stats" class="card"></div>
+      <button class="btn" data-go="analyze">Проверить свою монету</button>`;
+    mountChart(document.getElementById("chart"), state.demoCoin + "USDT", "1h", ({ calc, tick }) => { if (!tick) document.getElementById("stats").innerHTML = statsBlock(calc.stats, `${state.demoCoin} 1h, последние ${CFG.statN} сделок`); });
+  },
+
+  analyze() {
+    const paid = access(), used = store.get("freeWeek", "") === weekId();
+    const subsOk = state.subs.channel && state.subs.chat;
+    view.innerHTML = `${header()}
+      <div style="display:flex;flex-direction:column;gap:6px"><span class="eyebrow">${paid ? "БЕЗ ОГРАНИЧЕНИЙ" : "БЕСПЛАТНО"}</span><h1>Анализ монеты</h1>
+      <p class="lead">${paid ? "У вас полный доступ: проверяйте любые монеты." : "1 монета в неделю для подписчиков нашего канала и чата."}</p></div>
+      ${paid ? "" : `<div class="card" style="padding:0;gap:0">
+        <div class="row" style="padding:14px 16px;border-bottom:1px solid #EDEDED"><a href="${CFG.channel}" target="_blank" rel="noopener" data-sub="channel" style="text-decoration:underline">Наш канал</a><span class="${state.subs.channel ? "check" : "small"}">${state.subs.channel ? "подписан" : "не проверено"}</span></div>
+        <div class="row" style="padding:14px 16px;border-bottom:1px solid #EDEDED"><a href="${CFG.chat}" target="_blank" rel="noopener" data-sub="chat" style="text-decoration:underline">Наш чат</a><span class="${state.subs.chat ? "check" : "small"}">${state.subs.chat ? "подписан" : "не проверено"}</span></div>
+        <div class="row" style="padding:14px 16px;background:#FAFAFA"><span class="small" style="color:#555">Проверок на этой неделе</span><span class="mono" style="font-weight:600">${used ? 0 : 1} / 1</span></div>
+      </div>
+      ${subsOk ? "" : `<button class="btn ghost" id="checkSubs">Проверить подписку</button><p class="small" style="margin:-12px 0 0">В тестовой версии подписка засчитывается после перехода по обеим ссылкам. В рабочей версии её проверит бот.</p>`}`}
+      <div class="field"><label for="coin">Монета</label><input id="coin" class="input mono" placeholder="Тикер, например SOL" autocomplete="off" autocapitalize="characters" value="${esc(state.coin)}"></div>
+      <div class="chips" role="group" aria-label="Популярные монеты">${CFG.coins.map((c) => `<button class="chip" data-coin="${c}" aria-pressed="${state.coin === c}">${c}</button>`).join("")}</div>
+      <div class="field"><span style="font-size:13px;color:#555">Таймфрейм</span><div class="seg" role="group" aria-label="Таймфрейм">${["15m", "1h", "4h", "1d"].map((t) => `<button data-tf="${t}" aria-pressed="${state.tf === t}">${t === "1d" ? "1D" : t}</button>`).join("")}</div></div>
+      <button class="btn" id="run" ${!paid && (used || !subsOk) ? "disabled" : ""}>Анализировать ${esc(state.coin)} · ${state.tf === "1d" ? "1D" : state.tf}</button>
+      ${!paid && used ? `<p class="small" style="text-align:center;margin:-12px 0 0">Бесплатная проверка на этой неделе использована. Следующая: ${nextWeekDate()}.</p>` : ""}`;
+    const coin = document.getElementById("coin");
+    coin.addEventListener("input", () => { state.coin = coin.value.trim().toUpperCase().replace(/USDT$/, ""); document.getElementById("run").textContent = `Анализировать ${state.coin} · ${state.tf === "1d" ? "1D" : state.tf}`; view.querySelectorAll("[data-coin]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.coin === state.coin)); });
+    view.querySelectorAll("[data-sub]").forEach((a) => a.addEventListener("click", (e) => { state["opened_" + a.dataset.sub] = true; if (tg) { e.preventDefault(); try { tg.openTelegramLink(a.href); } catch (er) {} } }));
+    const cs = document.getElementById("checkSubs");
+    if (cs) cs.addEventListener("click", () => { if (state.opened_channel && state.opened_chat) { state.subs = { channel: true, chat: true }; store.set("subs", state.subs); haptic("medium"); } else { cs.textContent = "Сначала откройте канал и чат по ссылкам выше"; } render(); });
+    document.getElementById("run").addEventListener("click", () => { if (!state.coin) return; if (!paid) store.set("freeWeek", weekId()); haptic("medium"); go("result"); });
+  },
+
+  result() {
+    const sym = state.coin + "USDT", tfL = state.tf === "1d" ? "1D" : state.tf;
+    view.innerHTML = `${header("analyze")}
+      <div class="row" style="align-items:flex-end"><div style="display:flex;flex-direction:column;gap:4px"><span class="mono small">${esc(state.coin)} / USDT · ${tfL} · Binance</span><span id="px" class="price">—</span></div><span id="vd" class="verdict">…</span></div>
+      <div id="chart" class="chart" role="img" aria-label="График ${esc(state.coin)} с индикатором"></div>
+      <div id="out" style="display:flex;flex-direction:column;gap:20px"><p class="small">Считаю индикатор…</p></div>`;
+    mountChart(document.getElementById("chart"), sym, state.tf, ({ bars, calc, live, error, tick }) => {
+      if (error) { document.getElementById("out").innerHTML = `<div class="notice">${error}</div><button class="btn ghost" data-go="analyze">Выбрать другую монету</button>`; if (!access()) store.set("freeWeek", ""); return; }
+      document.getElementById("px").textContent = fmt(bars[bars.length - 1].close);
+      if (tick) return;
+      const t = calc.trade, st = calc.stats, pf = calc.profile, vd = document.getElementById("vd");
+      vd.textContent = st.verdict[0]; vd.className = "verdict " + st.verdict[1];
+      const when = t ? new Date(t.time * 1000).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+      document.getElementById("out").innerHTML = `
+        ${live ? "" : `<div class="notice">Демо-данные: в этом предпросмотре нет доступа к бирже. После размещения здесь будут реальные свечи Binance.</div>`}
+        ${t ? `<div style="display:flex;flex-direction:column;gap:10px"><div class="row"><span style="font-size:13px;color:#555">Последний сигнал</span><span class="small">${when}</span></div>
+        <div class="table">
+          <div><span style="display:flex;gap:10px;align-items:center"><span class="badge ${t.dir === 1 ? "buy" : "sell"}">${t.dir === 1 ? "BUY" : "SELL"}</span>Вход</span><span>${fmt(t.entry)}</span></div>
+          ${t.tp.map((p, j) => `<div><span style="color:var(--muted)">TP${j + 1}</span><span>${fmt(p)} ${t.stage > j || (t.result != null && t.result > j) ? '<span style="color:var(--up)">✓</span>' : ""}</span></div>`).join("")}
+          <div><span style="color:var(--down)">SL</span><span style="color:var(--muted)">${fmt(t.sl)}${t.result === 0 ? ' <span style="color:var(--down)">✗</span>' : ""}</span></div>
+        </div><span class="small">Статус: ${tradeText(t)}</span></div>` : `<p class="small">На этой истории сигналов нет.</p>`}
+        ${pf ? `<div class="tiles"><div class="tile"><span style="color:var(--va);font-weight:700">VAH</span><b style="font-size:15px">${fmt(pf.vah)}</b></div><div class="tile"><span style="color:var(--poc);font-weight:700">POC</span><b style="font-size:15px">${fmt(pf.poc)}</b></div><div class="tile"><span style="color:var(--va);font-weight:700">VAL</span><b style="font-size:15px">${fmt(pf.val)}</b></div></div>
+        <span class="small" style="margin-top:-12px">Объём профиля: покупки ${pf.buyPct}% / продажи ${100 - pf.buyPct}%</span>` : ""}
+        <div style="display:flex;flex-direction:column;gap:12px"><span style="font-size:13px;color:#555">Последние ${st.n} сделок по монете</span>
+          ${[["Дошли до TP1", st.tp1, "var(--up)"], ["Дошли до TP2", st.tp2, "var(--fg)"], ["Закрылись по SL", st.sl, "var(--down)"]].map(([l, v, c]) => `<div style="display:flex;flex-direction:column;gap:6px"><div class="row" style="font-size:14px"><span>${l}</span><span class="mono">${v} · ${pct(v, st.n)}%</span></div><div class="bar"><i style="width:${pct(v, st.n)}%;background:${c}"></i></div></div>`).join("")}
+        </div>
+        <p class="small" style="margin:0">Не является финансовой рекомендацией.</p>
+        ${access() ? `<button class="btn ghost" data-go="analyze">Проверить другую монету</button>` : `<div class="card"><b>Хотите так по любой монете?</b><span style="font-size:14px;color:#555">Следующая бесплатная проверка: ${nextWeekDate()}. С доступом: индикатор в вашем TradingView и анализ без ограничений.</span><button class="btn" data-go="plans">Получить полный доступ</button></div>`}`;
+    });
+  },
+
+  plans() {
+    const p = CFG.plans.find((x) => x.id === state.plan);
+    view.innerHTML = `${header()}
+      <div style="display:flex;flex-direction:column;gap:6px"><span class="eyebrow">ДОСТУП</span><h1>Индикатор в вашем TradingView</h1></div>
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:14px">
+        <div>✓ Закрытый скрипт, выдаём по нику TradingView</div><div>✓ Анализ любых монет здесь без ограничений</div><div>✓ Закрытый чат и инструкция по настройке</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">${CFG.plans.map((x) => `<button class="plan" data-plan="${x.id}" aria-pressed="${x.id === state.plan}"><span class="ring" aria-hidden="true"></span><span class="nm"><b style="font-size:16px">${x.name}</b><span class="small">${x.note}</span></span><span class="mono" style="font-weight:600">$${x.price}</span></button>`).join("")}</div>
+      <div class="field"><span style="font-size:13px;color:#555">Монета для оплаты · через CryptoBot</span>
+        <div class="seg" style="--n:3" role="group" aria-label="Монета для оплаты">${["USDT", "TON", "BTC"].map((c) => `<button data-pay="${c}" aria-pressed="${state.payCoin === c}">${c}</button>`).join("")}</div></div>
+      <button class="btn" data-go="pay">Оплатить $${p.price} · ${p.name}</button>`;
+  },
+
+  pay() {
+    const p = CFG.plans.find((x) => x.id === state.plan);
+    if (!state.invoice) state.invoice = { no: 10000 + Math.floor(Math.random() * 90000), until: Date.now() + 30 * 60000, paid: false };
+    const inv = state.invoice;
+    view.innerHTML = `${header("plans")}
+      <div class="steps"><div class="now">Оплата</div><div>Ник TradingView</div><div>Доступ</div></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><span class="eyebrow">СЧЁТ № ${inv.no}</span><h1>Оплата криптой</h1></div>
+      <div class="card" style="padding:0;gap:0">
+        <div style="padding:18px 16px;border-bottom:1px solid #EDEDED;display:flex;flex-direction:column;gap:4px"><span class="small" style="color:#555">К оплате</span>
+          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="price" style="font-size:36px">$${p.price}</span><span class="mono" style="color:#555">в ${state.payCoin} по курсу CryptoBot</span></div></div>
+        <div class="kv" style="padding:14px 16px"><span>Тариф</span><span>${p.name}</span><span>Монета</span><span class="mono">${state.payCoin}</span><span>Через</span><span>CryptoBot</span><span>Счёт действует</span><span class="mono" id="timer">30:00</span></div>
+      </div>
+      ${inv.paid ? `<div class="ok"><span style="color:var(--up);font-size:22px" aria-hidden="true">✓</span><div style="display:flex;flex-direction:column"><b>Оплата получена</b><span class="small" style="color:#555">$${p.price} в ${state.payCoin} · подтверждено CryptoBot</span></div></div>
+        <button class="btn" data-go="nick">Дальше: ник TradingView</button>`
+      : `<div class="notice" style="font-size:14px">Ждём оплату. Окно CryptoBot откроется поверх приложения, подтверждение придёт автоматически.</div>
+        <button class="btn" id="payBtn">Оплатить в CryptoBot ↗</button>
+        <p class="small" style="text-align:center;margin:-12px 0 0">Тестовая версия: настоящий платёж не создаётся, нажатие имитирует успешную оплату.</p>`}`;
+    const tick = () => { const el = document.getElementById("timer"); if (!el) return; const s = Math.max(0, Math.floor((inv.until - Date.now()) / 1000)); el.textContent = `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; setTimeout(tick, 1000); };
+    tick();
+    const b = document.getElementById("payBtn");
+    if (b) b.addEventListener("click", () => { b.disabled = true; b.textContent = "Ждём подтверждение…"; setTimeout(() => { inv.paid = true; haptic("heavy"); render(); }, 1500); });
+  },
+
+  nick() {
+    view.innerHTML = `${header("pay")}
+      <div class="steps"><div class="done">Оплата ✓</div><div class="now">Ник TradingView</div><div>Доступ</div></div>
+      <div style="display:flex;flex-direction:column;gap:8px"><h1>Оплата получена</h1><p class="lead">Укажите ник в TradingView, на него мы откроем доступ к индикатору.</p></div>
+      <form id="nf" class="field"><label for="tv">Ник TradingView</label><input id="tv" class="input mono" required minlength="2" placeholder="например trader_nick" value="${esc(store.get("tv", ""))}" autocomplete="off"><span class="small">Профиль в TradingView, ник под аватаром.</span>
+      <div class="card" style="margin-top:14px"><b>Что дальше</b><span style="font-size:14px;color:#333">1. Откроем доступ в течение [срок] и пришлём уведомление в Telegram.<br>2. TradingView → Индикаторы → Только по приглашению → INDICATOR.</span></div>
+      <button class="btn" style="margin-top:14px">Отправить ник</button></form>`;
+    document.getElementById("nf").addEventListener("submit", (e) => {
+      e.preventDefault(); const nick = document.getElementById("tv").value.trim(); if (!nick) return;
+      const p = CFG.plans.find((x) => x.id === state.plan);
+      store.set("tv", nick); store.set("access", { plan: p.id, name: p.name, since: Date.now(), until: p.days ? Date.now() + p.days * 86400000 : 0, status: "pending" });
+      state.invoice = null; haptic("medium"); go("profile");
+    });
+  },
+
+  profile() {
+    const a = access(), u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+    const name = u ? [u.first_name, u.last_name].filter(Boolean).join(" ") : "Гость";
+    const left = a && a.until ? Math.ceil((a.until - Date.now()) / 86400000) : null;
+    view.innerHTML = `${header()}
+      <div style="display:flex;align-items:center;gap:14px"><div style="width:56px;height:56px;border-radius:28px;background:#EDEDED;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600">${esc(name.slice(0, 1).toUpperCase())}</div>
+        <div style="display:flex;flex-direction:column"><b style="font-size:18px">${esc(name)}</b><span class="small">${u && u.username ? "@" + esc(u.username) : "откройте в Telegram, чтобы видеть свой профиль"}</span></div></div>
+      ${a ? `<div class="card"><div class="row"><b>Доступ к индикатору</b><span class="check">● ${a.status === "pending" ? "выдаётся" : "активен"}</span></div>
+        <div style="display:flex;align-items:baseline;gap:8px"><span class="price" style="font-size:34px">${left == null ? "∞" : left}</span><span style="color:#555;font-size:14px">${left == null ? "навсегда" : `дней осталось · до ${new Date(a.until).toLocaleDateString("ru-RU")}`}</span></div>
+        <div class="kv"><span>Тариф</span><span>${a.name}</span><span>TradingView</span><span class="mono">${esc(store.get("tv", "—"))}</span><span>Анализ монет</span><span>без ограничений</span></div>
+        ${a.status === "pending" ? `<div class="notice">Ник отправлен. Как только откроем доступ в TradingView, бот пришлёт уведомление.</div>` : ""}
+        ${a.until ? `<button class="btn" data-go="plans">Продлить</button>` : ""}</div>`
+      : `<div class="card"><b>Доступа пока нет</b><span style="font-size:14px;color:#555">Купите доступ, чтобы получить индикатор в TradingView и анализ любых монет.</span><button class="btn" data-go="plans">Купить доступ</button></div>`}
+      <div class="list">
+        ${a ? `<button data-go="nick" style="border:0;border-bottom:1px solid #EDEDED;background:none;text-align:left;width:100%">Сменить ник TradingView <span aria-hidden="true">›</span></button>` : ""}
+        <button data-go="demo" style="border:0;border-bottom:1px solid #EDEDED;background:none;text-align:left;width:100%">Как читать индикатор <span aria-hidden="true">›</span></button>
+        <a href="${CFG.channel}" target="_blank" rel="noopener" data-tglink>Наш канал <span aria-hidden="true">↗</span></a>
+        <a href="${CFG.chat}" target="_blank" rel="noopener" data-tglink>Наш чат <span aria-hidden="true">↗</span></a>
+      </div>
+      <button class="btn ghost" id="reset" style="min-height:44px;font-size:14px">Тест: сбросить покупку и бесплатную проверку</button>`;
+    document.getElementById("reset").addEventListener("click", () => { ["access", "freeWeek", "subs", "tv"].forEach((k) => store.set(k, null)); state.subs = { channel: false, chat: false }; render(); });
+    view.querySelectorAll("[data-tglink]").forEach((a) => a.addEventListener("click", (e) => { if (tg) { e.preventDefault(); try { tg.openTelegramLink(a.href); } catch (er) {} } }));
+  }
+};
+
+const tabOf = { home: "home", demo: "home", analyze: "analyze", result: "analyze", plans: "plans", pay: "plans", nick: "plans", profile: "profile" };
+const backOf = { demo: "home", result: "analyze", pay: "plans", nick: "pay" };
+function go(name) { state.screen = name; render(); window.scrollTo(0, 0); }
+function render() {
+  cleanup();
+  const name = state.screen || "home";
+  screens[name]();
+  document.querySelectorAll("nav.tabs button").forEach((b) => b.setAttribute("aria-current", b.dataset.tab === tabOf[name] ? "page" : "false"));
+}
+if (tg) { try { tg.BackButton.onClick(() => go(backOf[state.screen] || "home")); } catch (e) {} }
+
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button, a"); if (!t) return;
+  if (t.dataset.tab) { haptic(); go(t.dataset.tab); return; }
+  if (t.dataset.go) { haptic(); go(t.dataset.go); return; }
+  if (t.dataset.coin) { state.coin = t.dataset.coin; render(); return; }
+  if (t.dataset.tf) { state.tf = t.dataset.tf; render(); return; }
+  if (t.dataset.demo) { state.demoCoin = t.dataset.demo; render(); return; }
+  if (t.dataset.plan) { state.plan = t.dataset.plan; haptic(); render(); return; }
+  if (t.dataset.pay) { state.payCoin = t.dataset.pay; render(); return; }
+});
+render();
+})();
+</script>
+
+</body>
+</html>
