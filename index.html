@@ -1,11 +1,4 @@
-<!doctype html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<style>body{margin:0}[hidden]{display:none!important}</style>
-</head>
-<body>
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><style>body{margin:0}[hidden]{display:none!important}</style></head><body>
 <title>INDICATOR Mini App</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -143,6 +136,7 @@ const CFG = {
   pfBars: 360, pfRows: 80, vaPct: 70,
   channel: "https://t.me/+ek0gaMHzPEZjMzJi",
   chat: "https://t.me/+yiCccBnnIScxZGMy",
+  support: "https://t.me/pikulaalukip", // ваш личный Telegram для вопросов
   plans: [
     { id: "m1", name: "1 месяц", note: "попробовать", price: 99, days: 30 },
     { id: "m3", name: "3 месяца", note: "≈ $70 в месяц, экономия 29%", price: 211, days: 90 },
@@ -155,6 +149,7 @@ const WS = "wss://data-stream.binance.vision/ws/";
 
 const tg = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData ? window.Telegram.WebApp : null;
 if (tg) { try { tg.ready(); tg.expand(); tg.setHeaderColor("#FFFFFF"); tg.setBackgroundColor("#FFFFFF"); } catch (e) {} }
+const supportBtn = (label) => `<a class="btn ghost" href="${CFG.support}" target="_blank" rel="noopener" data-support>${label || "Написать в поддержку"}</a>`;
 const haptic = (t) => { try { tg && tg.HapticFeedback.impactOccurred(t || "light"); } catch (e) {} };
 
 // ---------- хранилище (в демо-режиме всё хранится в браузере) ----------
@@ -530,7 +525,8 @@ const screens = {
         <button class="btn" data-go="nick">Дальше: ник TradingView</button>`
       : `<div class="notice" style="font-size:14px">Ждём оплату. Окно CryptoBot откроется поверх приложения, подтверждение придёт автоматически.</div>
         <button class="btn" id="payBtn">Оплатить в CryptoBot ↗</button>
-        <p class="small" style="text-align:center;margin:-12px 0 0">Тестовая версия: настоящий платёж не создаётся, нажатие имитирует успешную оплату.</p>`}`;
+        <p class="small" style="text-align:center;margin:-12px 0 0">Тестовая версия: настоящий платёж не создаётся, нажатие имитирует успешную оплату.</p>`}
+      ${supportBtn("Проблема с оплатой? Напишите нам")}`;
     const tick = () => { const el = document.getElementById("timer"); if (!el) return; const s = Math.max(0, Math.floor((inv.until - Date.now()) / 1000)); el.textContent = `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; setTimeout(tick, 1000); };
     tick();
     const b = document.getElementById("payBtn");
@@ -541,9 +537,10 @@ const screens = {
     view.innerHTML = `${header("pay")}
       <div class="steps"><div class="done">Оплата ✓</div><div class="now">Ник TradingView</div><div>Доступ</div></div>
       <div style="display:flex;flex-direction:column;gap:8px"><h1>Оплата получена</h1><p class="lead">Укажите ник в TradingView, на него мы откроем доступ к индикатору.</p></div>
-      <form id="nf" class="field"><label for="tv">Ник TradingView</label><input id="tv" class="input mono" required minlength="2" placeholder="например trader_nick" value="${esc(store.get("tv", ""))}" autocomplete="off"><span class="small">Профиль в TradingView, ник под аватаром.</span>
+      <form id="nf" class="field"><label for="tv">Ник TradingView</label><input id="tv" class="input mono" required minlength="2" placeholder="например trader_nick" value="${esc(store.get("tv", ""))}" autocomplete="off"><span class="small">Именно ник (username), не почта. Его видно в TradingView: нажмите на аватар, ник под именем.</span>
       <div class="card" style="margin-top:14px"><b>Что дальше</b><span style="font-size:14px;color:#333">1. Откроем доступ в течение [срок] и пришлём уведомление в Telegram.<br>2. TradingView → Индикаторы → Только по приглашению → INDICATOR.</span></div>
-      <button class="btn" style="margin-top:14px">Отправить ник</button></form>`;
+      <button class="btn" style="margin-top:14px">Отправить ник</button></form>
+      ${supportBtn("Вопрос по оплате или доступу? Напишите нам")}`;
     document.getElementById("nf").addEventListener("submit", (e) => {
       e.preventDefault(); const nick = document.getElementById("tv").value.trim(); if (!nick) return;
       const p = CFG.plans.find((x) => x.id === state.plan);
@@ -570,6 +567,7 @@ const screens = {
         <button data-go="demo" style="border:0;border-bottom:1px solid #EDEDED;background:none;text-align:left;width:100%">Как читать индикатор <span aria-hidden="true">›</span></button>
         <a href="${CFG.channel}" target="_blank" rel="noopener" data-tglink>Наш канал <span aria-hidden="true">↗</span></a>
         <a href="${CFG.chat}" target="_blank" rel="noopener" data-tglink>Наш чат <span aria-hidden="true">↗</span></a>
+        <a href="${CFG.support}" target="_blank" rel="noopener" data-support>Поддержка: написать лично <span aria-hidden="true">↗</span></a>
       </div>
       <button class="btn ghost" id="reset" style="min-height:44px;font-size:14px">Тест: сбросить покупку и бесплатную проверку</button>`;
     document.getElementById("reset").addEventListener("click", () => { ["access", "freeWeek", "subs", "tv"].forEach((k) => store.set(k, null)); state.subs = { channel: false, chat: false }; render(); });
@@ -590,6 +588,7 @@ if (tg) { try { tg.BackButton.onClick(() => go(backOf[state.screen] || "home"));
 
 document.addEventListener("click", (e) => {
   const t = e.target.closest("button, a"); if (!t) return;
+  if (t.hasAttribute("data-support")) { if (tg) { e.preventDefault(); try { tg.openTelegramLink(t.href); } catch (er) {} } return; }
   if (t.dataset.tab) { haptic(); go(t.dataset.tab); return; }
   if (t.dataset.go) { haptic(); go(t.dataset.go); return; }
   if (t.dataset.coin) { state.coin = t.dataset.coin; render(); return; }
@@ -601,6 +600,4 @@ document.addEventListener("click", (e) => {
 render();
 })();
 </script>
-
-</body>
-</html>
+</body></html>
