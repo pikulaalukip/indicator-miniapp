@@ -136,7 +136,8 @@ const CFG = {
   pfBars: 360, pfRows: 80, vaPct: 70,
   channel: "https://t.me/+ek0gaMHzPEZjMzJi",
   chat: "https://t.me/+yiCccBnnIScxZGMy",
-  support: "https://t.me/pikulaalukip", // ваш личный Telegram для вопросов
+  support: "https://t.me/pikulaalukip",
+  api: "", // адрес сервера Cloudflare, например https://indicator.ваш-аккаунт.workers.dev ; пусто = тестовый режим // ваш личный Telegram для вопросов
   plans: [
     { id: "m1", name: "1 месяц", note: "попробовать", price: 99, days: 30 },
     { id: "m3", name: "3 месяца", note: "≈ $70 в месяц, экономия 29%", price: 211, days: 90 },
@@ -150,6 +151,17 @@ const WS = "wss://data-stream.binance.vision/ws/";
 const tg = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData ? window.Telegram.WebApp : null;
 if (tg) { try { tg.ready(); tg.expand(); tg.setHeaderColor("#FFFFFF"); tg.setBackgroundColor("#FFFFFF"); } catch (e) {} }
 const supportBtn = (label) => `<a class="btn ghost" href="${CFG.support}" target="_blank" rel="noopener" data-support>${label || "Написать в поддержку"}</a>`;
+const LIVE = !!(CFG.api && tg);
+async function call(path, body) {
+  const r = await fetch(CFG.api.replace(/\/$/, "") + "/api/" + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...(body || {}), initData: tg.initData }) });
+  const d = await r.json().catch(() => ({ error: "Сервер недоступен" }));
+  if (!r.ok || d.error) throw new Error(d.error || "Ошибка сервера");
+  return d;
+}
+function syncUser(u) {
+  store.set("access", u.plan && u.status !== "expired" ? { plan: u.plan, name: u.name, until: u.until, status: u.status === "active" ? "active" : "pending" } : null);
+  store.set("tv", u.tv || null); store.set("freeWeek", u.freeWeek || "");
+}
 const haptic = (t) => { try { tg && tg.HapticFeedback.impactOccurred(t || "light"); } catch (e) {} };
 
 // ---------- хранилище (в демо-режиме всё хранится в браузере) ----------
@@ -461,8 +473,21 @@ const screens = {
     coin.addEventListener("input", () => { state.coin = coin.value.trim().toUpperCase().replace(/USDT$/, ""); document.getElementById("run").textContent = `Анализировать ${state.coin} · ${state.tf === "1d" ? "1D" : state.tf}`; view.querySelectorAll("[data-coin]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.coin === state.coin)); });
     view.querySelectorAll("[data-sub]").forEach((a) => a.addEventListener("click", (e) => { state["opened_" + a.dataset.sub] = true; if (tg) { e.preventDefault(); try { tg.openTelegramLink(a.href); } catch (er) {} } }));
     const cs = document.getElementById("checkSubs");
-    if (cs) cs.addEventListener("click", () => { if (state.opened_channel && state.opened_chat) { state.subs = { channel: true, chat: true }; store.set("subs", state.subs); haptic("medium"); } else { cs.textContent = "Сначала откройте канал и чат по ссылкам выше"; } render(); });
-    document.getElementById("run").addEventListener("click", () => { if (!state.coin) return; if (!paid) store.set("freeWeek", weekId()); haptic("medium"); go("result"); });
+    if (cs && LIVE) cs.addEventListener("click", async () => {
+      cs.disabled = true; cs.textContent = "Проверяем…";
+      try {
+        const d = await call("subs");
+        if (d.channel === null || d.chat === null) { cs.disabled = false; cs.textContent = "Проверка подписки пока не настроена, напишите в поддержку"; return; }
+        state.subs = { channel: d.channel, chat: d.chat }; store.set("subs", state.subs); haptic("medium"); render();
+        if (!(d.channel && d.chat)) { const c2 = document.getElementById("checkSubs"); if (c2) c2.textContent = "Подписка не найдена. Подпишитесь и нажмите ещё раз"; }
+      } catch (e) { cs.disabled = false; cs.textContent = e.message; }
+    });
+    else if (cs) cs.addEventListener("click", () => { if (state.opened_channel && state.opened_chat) { state.subs = { channel: true, chat: true }; store.set("subs", state.subs); haptic("medium"); } else { cs.textContent = "Сначала откройте канал и чат по ссылкам выше"; } render(); });
+    document.getElementById("run").addEventListener("click", async (e) => {
+      if (!state.coin) return;
+      if (!paid && LIVE) { const b = e.currentTarget; b.disabled = true; try { const d = await call("free"); if (!d.ok) throw new Error(d.error); } catch (er) { b.textContent = er.message; return; } }
+      if (!paid) store.set("freeWeek", weekId()); haptic("medium"); go("result");
+    });
   },
 
   result() {
@@ -525,12 +550,23 @@ const screens = {
         <button class="btn" data-go="nick">Дальше: ник TradingView</button>`
       : `<div class="notice" style="font-size:14px">Ждём оплату. Окно CryptoBot откроется поверх приложения, подтверждение придёт автоматически.</div>
         <button class="btn" id="payBtn">Оплатить в CryptoBot ↗</button>
-        <p class="small" style="text-align:center;margin:-12px 0 0">Тестовая версия: настоящий платёж не создаётся, нажатие имитирует успешную оплату.</p>`}
+        ${LIVE ? `<p class="small" id="payMsg" style="text-align:center;margin:-12px 0 0">${inv.id ? "Оплатили? Подтверждение придёт само в течение минуты." : ""}</p>` : `<p class="small" style="text-align:center;margin:-12px 0 0">Тестовая версия: настоящий платёж не создаётся, нажатие имитирует успешную оплату.</p>`}`}
       ${supportBtn("Проблема с оплатой? Напишите нам")}`;
     const tick = () => { const el = document.getElementById("timer"); if (!el) return; const s = Math.max(0, Math.floor((inv.until - Date.now()) / 1000)); el.textContent = `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; setTimeout(tick, 1000); };
     tick();
     const b = document.getElementById("payBtn");
-    if (b) b.addEventListener("click", () => { b.disabled = true; b.textContent = "Ждём подтверждение…"; setTimeout(() => { inv.paid = true; haptic("heavy"); render(); }, 1500); });
+    if (b && LIVE) {
+      const msg = document.getElementById("payMsg");
+      const poll = async () => { if (state.screen !== "pay" || inv.paid || !inv.id) return; try { const d = await call("status", { invoice_id: inv.id }); if (d.status === "paid") { inv.paid = true; syncUser(d.user); haptic("heavy"); render(); return; } } catch (e) {} setTimeout(poll, 4000); };
+      if (inv.id) poll();
+      b.addEventListener("click", async () => {
+        try {
+          if (!inv.id) { b.disabled = true; b.textContent = "Создаём счёт…"; const d = await call("invoice", { plan: state.plan, asset: state.payCoin }); inv.id = d.invoice_id; inv.url = d.url; }
+          b.disabled = false; b.textContent = "Открыть счёт в CryptoBot ↗"; msg.textContent = "Оплатили? Подтверждение придёт само в течение минуты.";
+          tg.openTelegramLink(inv.url); poll();
+        } catch (e) { b.disabled = false; b.textContent = "Оплатить в CryptoBot ↗"; msg.textContent = e.message; }
+      });
+    } else if (b) b.addEventListener("click", () => { b.disabled = true; b.textContent = "Ждём подтверждение…"; setTimeout(() => { inv.paid = true; haptic("heavy"); render(); }, 1500); });
   },
 
   nick() {
@@ -543,6 +579,12 @@ const screens = {
       ${supportBtn("Вопрос по оплате или доступу? Напишите нам")}`;
     document.getElementById("nf").addEventListener("submit", (e) => {
       e.preventDefault(); const nick = document.getElementById("tv").value.trim(); if (!nick) return;
+      if (LIVE) {
+        const btn = e.target.querySelector("button"); btn.disabled = true; btn.textContent = "Отправляем…";
+        call("tv", { nick }).then((u) => { syncUser(u); state.invoice = null; haptic("medium"); go("profile"); })
+          .catch((er) => { btn.disabled = false; btn.textContent = "Отправить ник"; document.querySelector("#nf .small").textContent = er.message; });
+        return;
+      }
       const p = CFG.plans.find((x) => x.id === state.plan);
       store.set("tv", nick); store.set("access", { plan: p.id, name: p.name, since: Date.now(), until: p.days ? Date.now() + p.days * 86400000 : 0, status: "pending" });
       state.invoice = null; haptic("medium"); go("profile");
@@ -569,8 +611,8 @@ const screens = {
         <a href="${CFG.chat}" target="_blank" rel="noopener" data-tglink>Наш чат <span aria-hidden="true">↗</span></a>
         <a href="${CFG.support}" target="_blank" rel="noopener" data-support>Поддержка: написать лично <span aria-hidden="true">↗</span></a>
       </div>
-      <button class="btn ghost" id="reset" style="min-height:44px;font-size:14px">Тест: сбросить покупку и бесплатную проверку</button>`;
-    document.getElementById("reset").addEventListener("click", () => { ["access", "freeWeek", "subs", "tv"].forEach((k) => store.set(k, null)); state.subs = { channel: false, chat: false }; render(); });
+      ${LIVE ? "" : `<button class="btn ghost" id="reset" style="min-height:44px;font-size:14px">Тест: сбросить покупку и бесплатную проверку</button>`}`;
+    if (!LIVE) document.getElementById("reset").addEventListener("click", () => { ["access", "freeWeek", "subs", "tv"].forEach((k) => store.set(k, null)); state.subs = { channel: false, chat: false }; render(); });
     view.querySelectorAll("[data-tglink]").forEach((a) => a.addEventListener("click", (e) => { if (tg) { e.preventDefault(); try { tg.openTelegramLink(a.href); } catch (er) {} } }));
   }
 };
@@ -598,6 +640,7 @@ document.addEventListener("click", (e) => {
   if (t.dataset.pay) { state.payCoin = t.dataset.pay; render(); return; }
 });
 render();
+if (LIVE) call("me").then((u) => { syncUser(u); if (["profile", "analyze", "plans"].includes(tabOf[state.screen || "home"])) render(); }).catch(() => {});
 })();
 </script>
 </body></html>
